@@ -16,7 +16,7 @@ services:
     networks:
       - "traefiknet"
   spawner:
-    image: "nickxbs/spawner:latest"
+    image: "nickxbs/spawner:ns"
     container_name: "spawner"
     ports:
       - "8008:8008"
@@ -24,14 +24,46 @@ services:
       - "/var/run/docker.sock:/var/run/docker.sock"
     networks:
       - "traefiknet"
-#    command: ./spawner -container-prefix=''
+    command: ./spawner  -cookie-fallback-url='http://${HOST}/auth' -traefik-check-enabled=true
+    environment:
+      - GIN_MODE=release
     labels:
       traefik.enable: "true"
       traefik.http.routers.spawner.entrypoints: "web"
       traefik.http.routers.spawner.rule: "PathPrefix(`/`)"
-      traefik.http.routers.spawner.middlewares: "spawner-context"
-      traefik.http.middlewares.spawner-context.redirectregex.regex: "^http://localhost/deploy(.*)"
-      traefik.http.middlewares.spawner-context.redirectregex.replacement: "http://localhost/"
+      traefik.http.services.spawner.loadbalancer.server.port: 8000
+  passport-auth:
+    image: "nickxbs/passport-auth:latest"
+    container_name: "passport-auth"
+    ports:
+      - "3000:3000"
+    networks:
+      - "traefiknet"
+    environment:
+      - CALLBACK_URL=https://${HOST}:3000/auth/google/callback
+      - CLIENT_ID=802803152311-tmr9br4al2hb4rlhd4b7np93ukfpuaim.apps.googleusercontent.com
+      - CLIENT_SECRET=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
+      - FITBIT_CLIENT_ID=238LRG
+      - FITBIT_CLIENT_SECRET=d3773e74e1ef2b154f36b3512dc54d8f
+      - FITBIT_CALLBACK_URL=https://${HOST}:3000/auth/fitbit/callback
+      - MONGO_URI=mongodb://mongo/passport?retryWrites=true&w=majority
+      - NSMONGO_URI=mongodb://mongo/ns
+      - PORT=3000
+      - LOG_LEVEL=debug      
+      - SPAWNER=http://spawner:8008/deploy    
+      - USE_HTTPS=true
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.passport-auth.entrypoints: "web"
+      traefik.http.routers.passport-auth.rule: "PathPrefix(`/auth`)"
+      traefik.http.services.passport-auth.loadbalancer.server.port: 3000
+  mongo:
+    image: mongo:4.4
+    container_name: "mongo"
+    networks:
+      - "traefiknet"
+    command: mongod --quiet --logpath /dev/null
+
 networks:
   traefiknet:
     name: traefiknet
